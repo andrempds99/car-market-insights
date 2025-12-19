@@ -26,6 +26,11 @@ export default function PriceAnalytics() {
 
   const loadData = async () => {
     setLoading(true);
+    // Clear old data when filters change
+    setFmvData(null);
+    setDistribution(null);
+    setAnomalies([]);
+    
     try {
       const params = new URLSearchParams();
       if (filters.make) params.append('make', filters.make);
@@ -33,26 +38,53 @@ export default function PriceAnalytics() {
       if (filters.year) params.append('year', filters.year);
       if (filters.mileage) params.append('mileage_km', filters.mileage);
 
+      // Build params for anomalies (include filter parameters)
+      const anomaliesParams = new URLSearchParams();
+      anomaliesParams.append('limit', '20');
+      if (filters.make) anomaliesParams.append('make', filters.make);
+      if (filters.model) anomaliesParams.append('model', filters.model);
+      if (filters.year) anomaliesParams.append('year', filters.year);
+
       const [fmvRes, anomaliesRes, distRes] = await Promise.all([
         fetch(`${API_BASE}/api/analytics/price/fmv?${params}`).catch(() => ({ ok: false })),
-        fetch(`${API_BASE}/api/analytics/price/anomalies?limit=20`).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/analytics/price/anomalies?${anomaliesParams}`).catch(() => ({ ok: false })),
         fetch(`${API_BASE}/api/analytics/price/distribution?${params}`).catch(() => ({ ok: false }))
       ]);
 
       if (fmvRes.ok) {
         const data = await fmvRes.json();
-        setFmvData(data);
+        if (data.error) {
+          setFmvData(null);
+        } else {
+          setFmvData(data);
+        }
+      } else {
+        setFmvData(null);
       }
+      
       if (anomaliesRes.ok) {
         const data = await anomaliesRes.json();
         setAnomalies(data.anomalies || []);
+      } else {
+        setAnomalies([]);
       }
+      
       if (distRes.ok) {
         const data = await distRes.json();
-        setDistribution(data);
+        if (data.error) {
+          setDistribution(null);
+        } else {
+          setDistribution(data);
+        }
+      } else {
+        setDistribution(null);
       }
     } catch (err) {
       console.error('Error loading price analytics:', err);
+      // Clear data on error
+      setFmvData(null);
+      setDistribution(null);
+      setAnomalies([]);
     } finally {
       setLoading(false);
     }
@@ -111,6 +143,12 @@ export default function PriceAnalytics() {
       </div>
 
       {loading && <div className="loading">Loading analytics...</div>}
+
+      {!loading && !fmvData && !distribution && anomalies.length === 0 && (
+        <div className="card" style={{ padding: '20px', textAlign: 'center', color: '#9cb0c9' }}>
+          No data available for the selected filters. Try adjusting your filters.
+        </div>
+      )}
 
       {fmvData && !fmvData.error && (
         <div className="card" style={{ marginBottom: '16px' }}>

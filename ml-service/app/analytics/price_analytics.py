@@ -82,9 +82,41 @@ class PriceAnalytics:
             "confidence": "high" if int(row['sample_size'] or 0) >= 10 else "medium" if int(row['sample_size'] or 0) >= 5 else "low"
         }
     
-    def detect_anomalies(self, limit: int = 50, threshold: float = 2.0) -> Dict[str, Any]:
+    def detect_anomalies(
+        self,
+        limit: int = 50,
+        threshold: float = 2.0,
+        make: Optional[str] = None,
+        model: Optional[str] = None,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
         """Detect price anomalies using Z-score method."""
-        query = """
+        filters = []
+        params = []
+        param_idx = 1
+        
+        # Base filters
+        filters.append("l.price_eur IS NOT NULL")
+        filters.append("l.price_eur > 0")
+        
+        if make:
+            filters.append(f"(l.extracted_make ILIKE ${param_idx} OR mk.name ILIKE ${param_idx})")
+            params.append(f"%{make}%")
+            param_idx += 1
+        
+        if model:
+            filters.append(f"(l.extracted_model ILIKE ${param_idx} OR m.name ILIKE ${param_idx})")
+            params.append(f"%{model}%")
+            param_idx += 1
+        
+        if year:
+            filters.append(f"l.year = ${param_idx}")
+            params.append(year)
+            param_idx += 1
+        
+        where_clause = "WHERE " + " AND ".join(filters)
+        
+        query = f"""
             SELECT 
                 l.id,
                 l.url,
@@ -97,13 +129,12 @@ class PriceAnalytics:
             FROM listings l
             LEFT JOIN models m ON m.id = l.model_id
             LEFT JOIN makers mk ON mk.id = m.maker_id
-            WHERE l.price_eur IS NOT NULL
-            AND l.price_eur > 0
+            {where_clause}
             ORDER BY l.price_eur DESC
             LIMIT 1000
         """
         
-        results = execute_query(query)
+        results = execute_query(query, tuple(params))
         if not results:
             return {"anomalies": []}
         
@@ -140,7 +171,9 @@ class PriceAnalytics:
     def get_distribution(
         self,
         make: Optional[str] = None,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        year: Optional[int] = None,
+        mileage_km: Optional[float] = None
     ) -> Dict[str, Any]:
         """Get price distribution statistics."""
         filters = []
@@ -156,6 +189,22 @@ class PriceAnalytics:
             filters.append(f"(l.extracted_model ILIKE ${param_idx} OR m.name ILIKE ${param_idx})")
             params.append(f"%{model}%")
             param_idx += 1
+        
+        if year:
+            filters.append(f"l.year = ${param_idx}")
+            params.append(year)
+            param_idx += 1
+        
+        if mileage_km:
+            # Filter by mileage range (within 20% of specified mileage)
+            filters.append(f"l.mileage_km BETWEEN ${param_idx} AND ${param_idx + 1}")
+            params.append(mileage_km * 0.8)
+            params.append(mileage_km * 1.2)
+            param_idx += 2
+        
+        # Always include price filters
+        filters.append("l.price_eur IS NOT NULL")
+        filters.append("l.price_eur > 0")
         
         where_clause = "WHERE " + " AND ".join(filters) if filters else ""
         
@@ -173,8 +222,6 @@ class PriceAnalytics:
             LEFT JOIN models m ON m.id = l.model_id
             LEFT JOIN makers mk ON mk.id = m.maker_id
             {where_clause}
-            AND l.price_eur IS NOT NULL
-            AND l.price_eur > 0
         """
         
         results = execute_query(query, tuple(params))

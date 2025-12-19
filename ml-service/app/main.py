@@ -109,11 +109,20 @@ async def get_fair_market_value(
 @app.get("/ml/analytics/price/anomalies")
 async def get_price_anomalies(
     limit: int = Query(50, ge=1, le=500),
-    threshold: float = Query(2.0, ge=1.0, le=5.0)
+    threshold: float = Query(2.0, ge=1.0, le=5.0),
+    make: Optional[str] = None,
+    model: Optional[str] = None,
+    year: Optional[int] = None
 ):
     """Get price anomalies."""
     try:
-        result = price_analytics.detect_anomalies(limit=limit, threshold=threshold)
+        result = price_analytics.detect_anomalies(
+            limit=limit,
+            threshold=threshold,
+            make=make,
+            model=model,
+            year=year
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -122,11 +131,18 @@ async def get_price_anomalies(
 @app.get("/ml/analytics/price/distribution")
 async def get_price_distribution(
     make: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    year: Optional[int] = None,
+    mileage_km: Optional[float] = None
 ):
     """Get price distribution statistics."""
     try:
-        result = price_analytics.get_distribution(make=make, model=model)
+        result = price_analytics.get_distribution(
+            make=make,
+            model=model,
+            year=year,
+            mileage_km=mileage_km
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
