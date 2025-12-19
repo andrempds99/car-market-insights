@@ -18,14 +18,20 @@ export default function PriceAnalytics() {
   const [anomalies, setAnomalies] = useState([]);
   const [distribution, setDistribution] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filters, setFilters] = useState({ make: '', model: '', year: '', mileage: '' });
 
   useEffect(() => {
     loadData();
   }, [filters]);
 
+  const hasActiveFilters = () => {
+    return !!(filters.make || filters.model || filters.year || filters.mileage);
+  };
+
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     // Clear old data when filters change
     setFmvData(null);
     setDistribution(null);
@@ -46,38 +52,64 @@ export default function PriceAnalytics() {
       if (filters.year) anomaliesParams.append('year', filters.year);
 
       const [fmvRes, anomaliesRes, distRes] = await Promise.all([
-        fetch(`${API_BASE}/api/analytics/price/fmv?${params}`).catch(() => ({ ok: false })),
-        fetch(`${API_BASE}/api/analytics/price/anomalies?${anomaliesParams}`).catch(() => ({ ok: false })),
-        fetch(`${API_BASE}/api/analytics/price/distribution?${params}`).catch(() => ({ ok: false }))
+        fetch(`${API_BASE}/api/analytics/price/fmv?${params}`).catch((err) => {
+          console.error('FMV fetch error:', err);
+          return { ok: false, error: err };
+        }),
+        fetch(`${API_BASE}/api/analytics/price/anomalies?${anomaliesParams}`).catch((err) => {
+          console.error('Anomalies fetch error:', err);
+          return { ok: false, error: err };
+        }),
+        fetch(`${API_BASE}/api/analytics/price/distribution?${params}`).catch((err) => {
+          console.error('Distribution fetch error:', err);
+          return { ok: false, error: err };
+        })
       ]);
+
+      let hasData = false;
+      let hasErrors = false;
 
       if (fmvRes.ok) {
         const data = await fmvRes.json();
         if (data.error) {
           setFmvData(null);
+          hasErrors = true;
         } else {
           setFmvData(data);
+          hasData = true;
         }
       } else {
         setFmvData(null);
+        if (fmvRes.error) hasErrors = true;
       }
       
       if (anomaliesRes.ok) {
         const data = await anomaliesRes.json();
-        setAnomalies(data.anomalies || []);
+        const anomaliesList = data.anomalies || [];
+        setAnomalies(anomaliesList);
+        if (anomaliesList.length > 0) hasData = true;
       } else {
         setAnomalies([]);
+        if (anomaliesRes.error) hasErrors = true;
       }
       
       if (distRes.ok) {
         const data = await distRes.json();
         if (data.error) {
           setDistribution(null);
+          hasErrors = true;
         } else {
           setDistribution(data);
+          hasData = true;
         }
       } else {
         setDistribution(null);
+        if (distRes.error) hasErrors = true;
+      }
+
+      // Set error state if all requests failed and we have active filters
+      if (hasErrors && !hasData && hasActiveFilters()) {
+        setError('Unable to fetch data. The ML service may be unavailable.');
       }
     } catch (err) {
       console.error('Error loading price analytics:', err);
@@ -85,6 +117,11 @@ export default function PriceAnalytics() {
       setFmvData(null);
       setDistribution(null);
       setAnomalies([]);
+      if (hasActiveFilters()) {
+        setError('An error occurred while loading data. Please try again.');
+      } else {
+        setError('Unable to connect to the analytics service. Please ensure the ML service is running.');
+      }
     } finally {
       setLoading(false);
     }
@@ -144,9 +181,29 @@ export default function PriceAnalytics() {
 
       {loading && <div className="loading">Loading analytics...</div>}
 
-      {!loading && !fmvData && !distribution && anomalies.length === 0 && (
+      {error && (
+        <div className="card" style={{ 
+          padding: '20px', 
+          textAlign: 'center', 
+          color: '#f06272',
+          background: '#1a2332',
+          border: '1px solid #f06272',
+          borderRadius: '8px',
+          marginBottom: '16px'
+        }}>
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && !fmvData && !distribution && anomalies.length === 0 && hasActiveFilters() && (
         <div className="card" style={{ padding: '20px', textAlign: 'center', color: '#9cb0c9' }}>
           No data available for the selected filters. Try adjusting your filters.
+        </div>
+      )}
+
+      {!loading && !error && !fmvData && !distribution && anomalies.length === 0 && !hasActiveFilters() && (
+        <div className="card" style={{ padding: '20px', textAlign: 'center', color: '#9cb0c9' }}>
+          Use the filters above to view price analytics and predictions for specific cars.
         </div>
       )}
 

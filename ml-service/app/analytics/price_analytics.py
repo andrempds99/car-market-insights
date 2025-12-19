@@ -38,6 +38,10 @@ class PriceAnalytics:
             params.append(year)
             param_idx += 1
         
+        # Always include price filters
+        filters.append("l.price_eur IS NOT NULL")
+        filters.append("l.price_eur > 0")
+        
         where_clause = "WHERE " + " AND ".join(filters) if filters else ""
         
         query = f"""
@@ -52,8 +56,6 @@ class PriceAnalytics:
             LEFT JOIN models m ON m.id = l.model_id
             LEFT JOIN makers mk ON mk.id = m.maker_id
             {where_clause}
-            AND l.price_eur IS NOT NULL
-            AND l.price_eur > 0
         """
         
         results = execute_query(query, tuple(params))
