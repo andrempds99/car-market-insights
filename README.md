@@ -268,5 +268,4 @@ If you see "Failed to fetch" in the frontend:
 
 This project is provided as-is for educational and analytical purposes.
 
-#   c a r - m a r k e t - i n s i g h t s  
- 
+#
